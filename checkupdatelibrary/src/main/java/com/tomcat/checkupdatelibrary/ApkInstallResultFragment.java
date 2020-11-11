@@ -32,7 +32,9 @@ import kotlin.LazyKt;
 import static com.tomcat.checkupdatelibrary.utils.FileUtils.setPermission;
 
 /**
- * android8+自动安装适配
+ * 创建者：TomCat0916
+ * 创建时间：2020/11/6
+ * 功能描述：安装应用
  */
 public class ApkInstallResultFragment extends Fragment {
 

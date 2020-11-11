@@ -2,10 +2,8 @@ package com.tomcat.checkupdatelibrary;
 
 import android.app.Application;
 
-import java.io.File;
-
 /**
- * 创建者：caizongwen
+ * 创建者：TomCat0916
  * 创建时间：2020/11/8
  * 功能描述：
  */
@@ -25,14 +23,14 @@ public class CheckUpdateConfig {
         return instance;
     }
 
-    public  static CheckUpdateConfig getInstance() {
+    public static CheckUpdateConfig getInstance() {
         if (instance == null) {
             throw new NullPointerException("请先在Application的onCreate初始化");
         }
         return instance;
     }
 
-    public  Application getContext() {
+    public Application getContext() {
         return application;
     }
 }

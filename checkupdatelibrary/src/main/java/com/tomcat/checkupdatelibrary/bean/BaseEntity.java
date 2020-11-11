@@ -3,6 +3,11 @@ package com.tomcat.checkupdatelibrary.bean;
 
 import java.io.Serializable;
 
+/**
+ * 创建者：TomCat0916
+ * 创建时间：2020/11/6
+ * 功能描述：
+ */
 public class BaseEntity<T> implements Serializable {
 
     private int success;
