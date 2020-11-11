@@ -1,2 +1,3 @@
 rootProject.name='CheckUpdate'
 include ':app'
+include ':checkupdatelibrary'
