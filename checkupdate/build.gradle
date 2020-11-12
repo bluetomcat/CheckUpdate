@@ -1,7 +1,8 @@
 apply plugin: 'com.android.library'
 apply plugin: 'com.github.dcendents.android-maven'
+apply plugin: 'com.novoda.bintray-release'
 
-group GROUP_ID
+group rootProject.GROUP_ID
 version "v1.0.0-alpha"
 
 android {
@@ -43,3 +44,11 @@ dependencies {
     compileOnly "com.squareup.okhttp3:okhttp:4.9.0"
 }
 
+publish {
+    groupId = rootProject.GROUP_ID
+    artifactId = project.name
+    publishVersion = version
+    desc = 'check update'
+    userOrg = rootProject.USERORG
+    website = rootProject.WEBSITE
+}

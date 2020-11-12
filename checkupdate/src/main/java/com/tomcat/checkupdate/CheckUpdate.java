@@ -35,36 +35,6 @@ import static java.io.File.separatorChar;
  * 功能描述：CheckUpdate 2.0
  * 分离UI和下载逻辑,仅包含检查更新流程/校验逻辑;
  * 示例:
- * <pre>
- * CheckUpdate<VersionEntity.DataBean> checkUpdate
- *             = new CheckUpdate.Builder<VersionEntity.DataBean>()
- *            .setUpdateUiListener((c, d) -> {
- *                //提示是否更新UI 使用c.postUpdate(isUpdate)通知下一步  可省
- *            })
- *            .setNetworkUiListener((c, d) -> {
- *                //提示是否非WIFI环境下载文件UI 使用c.postDownload(isDownload)通知下一步  可省
- *            })
- *            .setOnDownloadListener((file, url, listener, date) -> {
- *                //下载操作 使用listener.onSuccess()/listener.onFailed(e)/listener.onCanceled()沟通下一步
- *            })
- *            .setCacheDir(getExternalCacheDir())//设置缓存文件夹 可省
- *            .build();
- *
- * BaseApplication.instance.repositoryManager()
- *         .obtainRetrofitService(Api.class)
- *         .getVersionInfo(5)//请求网络版本
- *         .compose(checkUpdate.checkUpdate(this))//检查逻辑(含比较网络版本/下载文件(自定义下载实现)/安装文件) 可拆分并自定义
- *         .subscribe(new SampleObserver<NoteEvent>() {
- *             public void onNext(NoteEvent noteEvent) {
- *                 super.onNext(noteEvent);
- *                 BaseUtils.makeText(noteEvent.getMsg());
- *             }
- *             public void onError(@NotNull Throwable e) {
- *                 super.onError(e);
- *                 BaseUtils.makeText("检查更新失败");
- *             }
- *         });
- * </pre>
  */
 public class CheckUpdate<T extends BaseVersionEntity> {
 
