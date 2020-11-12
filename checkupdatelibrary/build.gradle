@@ -1,5 +1,9 @@
 apply plugin: 'com.android.library'
-apply plugin: 'maven-publish'
+apply plugin: 'com.github.dcendents.android-maven'
+
+group GROUP_ID
+version "v1.0.0-alpha"
+
 android {
     compileSdkVersion 30
     buildToolsVersion "30.0.2"
@@ -30,7 +34,7 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 
     implementation 'androidx.appcompat:appcompat:1.2.0'
-    testImplementation 'junit:junit:4.12'
+    testImplementation 'junit:junit:4.13'
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
 
@@ -38,28 +42,4 @@ dependencies {
     compileOnly "io.reactivex.rxjava2:rxandroid:2.1.1"
     compileOnly "com.squareup.okhttp3:okhttp:4.9.0"
 }
-afterEvaluate {
-    publishing {
-        publications {
-            // Creates a Maven publication called "release".
-            release(MavenPublication) {
-                // Applies the component for the release build variant.
-                from components.release
 
-                // You can then customize attributes of the publication as shown below.
-                groupId = 'com.tomcate.checkupdate'
-                artifactId = 'core'
-                version = '1.0.1-bate'
-            }
-            // Creates a Maven publication called “debug”.
-            debug(MavenPublication) {
-                // Applies the component for the debug build variant.
-                from components.debug
-
-                groupId = 'com.example.MyLibrary'
-                artifactId = 'core-debug'
-                version = '1.0.1-bate'
-            }
-        }
-    }
-}
