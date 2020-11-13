@@ -1,5 +1,5 @@
 [ ![Download](https://api.bintray.com/packages/tomcat/maven/checkupdate/images/download.svg) ](https://bintray.com/tomcat/maven/checkupdate/_latestVersion)
-[![](https://jitpack.io/v/bluetomcat/CheckUpdate.svg)](https://jitpack.io/#bluetomcat/CheckUpdate)
+[ ![Download](https://jitpack.io/v/bluetomcat/CheckUpdate.svg)](https://jitpack.io/#bluetomcat/CheckUpdate)
 ___
 # CheckUpdate
 分离UI和下载，仅包含更新判断和安装逻辑；结合Rxjava链式编程
