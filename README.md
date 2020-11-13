@@ -32,6 +32,7 @@ ___
 ```
 CheckUpdate<VersionEntity.DataBean> checkUpdate = new CheckUpdate.Builder<>()
                     .setUpdateUiListener((c, d) -> {
+                        //主线程 
                         //提示用户是否更新的UI 使用c.postUpdate(isUpdate)通知下一步  可省 默认上一步结果判断是否更新
                         messageDialog.setMessage(d.getAppDesc())
                                 .setTitle("更新提示")
@@ -42,6 +43,7 @@ CheckUpdate<VersionEntity.DataBean> checkUpdate = new CheckUpdate.Builder<>()
                                 .show();
                     })
                     .setNetworkUiListener((c, d) -> {
+                         //主线程 
                         //提示是否非WIFI环境下载文件的UI 使用c.postDownload(isDownload)通知下一步  可省 默认上一步结果+是否已下载文件+网络是否可用判断是否下载
                         messageDialog.setMessage("当前非WIFI环境是否继续下载?")
                                 .setTitle("提示")
@@ -52,6 +54,7 @@ CheckUpdate<VersionEntity.DataBean> checkUpdate = new CheckUpdate.Builder<>()
                                 .show();
                     })
                     .setOnDownloadListener((file, url, downLoadResult, date) -> {
+                        //主线程 
                         downLoadHelper.StartDownload(file, url, downLoadResult);//自行依赖下载工具  将下载结果通过downLoadResult回传
                     })
                     .setCacheDir(getExternalCacheDir())//设置缓存文件夹 可省
