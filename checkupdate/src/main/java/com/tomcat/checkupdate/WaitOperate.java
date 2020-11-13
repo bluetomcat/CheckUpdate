@@ -32,6 +32,13 @@ public class WaitOperate<N extends NoteEvent> implements CheckUpdate.OperateList
 
     public void onDestroy() {
         if (subjects != null && !subjects.hasComplete()) {
+            if (lastNote == null){
+                lastNote = (N) new NoteEvent();
+            }
+            lastNote.setNeedUp(false);
+            lastNote.setMsg("取消检查更新");
+            lastNote.setState(ResultState.RESULT_CANCEL);
+            subjects.onNext(lastNote);
             subjects.onComplete();
         }
         subjects = null;
