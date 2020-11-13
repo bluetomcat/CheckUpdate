@@ -1,6 +1,7 @@
 # CheckUpdate
 [ ![Download](https://api.bintray.com/packages/tomcat/maven/checkupdate/images/download.svg) ](https://bintray.com/tomcat/maven/checkupdate/_latestVersion)
 [![](https://jitpack.io/v/bluetomcat/CheckUpdate.svg)](https://jitpack.io/#bluetomcat/CheckUpdate)
+分离UI和下载，仅包含更新判断逻辑和安装逻辑；结合Rxjava链式编程
 ###  JitPack引用
 1、工程`build.gradle`文件
   ```  
@@ -15,14 +16,14 @@
   ```
   dependencies {
             ...
-            implementation 'com.github.bluetomcat:CheckUpdate:v1.0.1-alpha'//添加
+            implementation 'com.github.bluetomcat:CheckUpdate:1.0.1-bate'//添加
     }
   ```
 ### jcenter引用
    ```
     dependencies {
              ...
-             implementation 'com.github.bluetomcat:checkupdate:v1.0.1-alpha'//添加
+             implementation 'com.github.bluetomcat:checkupdate:1.0.1-bate'//添加
     }
    ```
 ### 使用
