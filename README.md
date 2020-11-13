@@ -1,7 +1,8 @@
-# CheckUpdate
 [ ![Download](https://api.bintray.com/packages/tomcat/maven/checkupdate/images/download.svg) ](https://bintray.com/tomcat/maven/checkupdate/_latestVersion)
 [![](https://jitpack.io/v/bluetomcat/CheckUpdate.svg)](https://jitpack.io/#bluetomcat/CheckUpdate)
-分离UI和下载，仅包含更新判断逻辑和安装逻辑；结合Rxjava链式编程
+___
+# CheckUpdate
+分离UI和下载，仅包含更新判断和安装逻辑；结合Rxjava链式编程
 ###  JitPack引用
 1、工程`build.gradle`文件
   ```  
