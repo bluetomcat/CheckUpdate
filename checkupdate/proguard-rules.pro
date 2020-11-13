@@ -19,6 +19,6 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
--dontwarn com.tomcat.checkupdatelibrary.**
--keep class com.tomcat.checkupdatelibrary.** { *; }
--keep interface com.tomcat.checkupdatelibrary.** { *; }
+-dontwarn com.tomcat.checkupdate.**
+-keep class com.tomcat.checkupdate.** { *; }
+-keep interface com.tomcat.checkupdate.** { *; }
