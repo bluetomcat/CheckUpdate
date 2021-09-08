@@ -6,11 +6,13 @@ import android.text.TextUtils;
 import com.tomcat.checkupdate.bean.BaseEntity;
 import com.tomcat.checkupdate.bean.NetworkEvent;
 import com.tomcat.checkupdate.bean.NoteEvent;
+import com.tomcat.checkupdate.interfaces.BaseBuilder;
 import com.tomcat.checkupdate.interfaces.BaseVersionEntity;
 import com.tomcat.checkupdate.interfaces.DownLoadResult;
 import com.tomcat.checkupdate.interfaces.InstallResultListener;
-import com.tomcat.checkupdate.interfaces.OnDownloadListener;
 import com.tomcat.checkupdate.interfaces.OnShowUiListener;
+import com.tomcat.checkupdate.interfaces.ProxyDownLoadCallback;
+import com.tomcat.checkupdate.interfaces.ProxyInstallCallback;
 import com.tomcat.checkupdate.interfaces.ResultState;
 import com.tomcat.checkupdate.utils.AppUtils;
 import com.tomcat.checkupdate.utils.FileUtils;
@@ -19,6 +21,7 @@ import com.tomcat.checkupdate.utils.Utils;
 
 import java.io.File;
 
+import androidx.annotation.RequiresPermission;
 import androidx.appcompat.app.AppCompatActivity;
 import io.reactivex.Observable;
 import io.reactivex.ObservableSource;
@@ -27,6 +30,10 @@ import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
 
+import static android.Manifest.permission.ACCESS_WIFI_STATE;
+import static android.Manifest.permission.INTERNET;
+import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
+import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static java.io.File.separatorChar;
 
 /**
@@ -36,17 +43,19 @@ import static java.io.File.separatorChar;
  * 分离UI和下载逻辑,仅包含检查更新流程/校验逻辑;
  * 示例:
  */
-public class CheckUpdate<T extends BaseVersionEntity> {
+@SuppressWarnings("all")
+public class CheckUpdate {
 
-    private T data;
+    private BaseVersionEntity data;
     private String url;
     private File apkFile;
-    private File cacheDir;
-    private boolean isDebug;
+    private String cacheDir;
+    private String authorities;
     private boolean isForceUpdate;
-    private OnShowUiListener<T> updateUiListener;
-    private OnShowUiListener<T> networkUiListener;
-    private OnDownloadListener<T> onDownloadListener;
+    private OnShowUiListener<BaseVersionEntity> updateUiListener;
+    private OnShowUiListener<BaseVersionEntity> networkUiListener;
+    private ProxyDownLoadCallback<BaseVersionEntity> proxyDownLoadCallback;
+    private ProxyInstallCallback proxyInstallCallback;
     private WaitOperate<NoteEvent> installOperate;
     private WaitOperate<NoteEvent> updateUiOperate;
     private WaitOperate<NoteEvent> downloadOperate;
@@ -70,7 +79,8 @@ public class CheckUpdate<T extends BaseVersionEntity> {
     private DownLoadResult downLoadResult = new DownLoadResult() {
 
         @Override
-        public void onSuccess() {
+        public void onSuccess(File file) {
+            apkFile = file;
             if (downloadOperate != null) {
                 downloadOperate.goNext(true, "下载完成");
             }
@@ -91,32 +101,38 @@ public class CheckUpdate<T extends BaseVersionEntity> {
         }
     };
 
-    private CheckUpdate(Builder<T> builder) {
-        isForceUpdate = builder.isForceUpdate;
-        cacheDir = builder.parentDir;
-        if (!FileUtils.isDir(cacheDir)) {
-            File externalCacheDir = context.getExternalCacheDir();
-            this.cacheDir = externalCacheDir == null ? context.getCacheDir() : externalCacheDir;
-        }
-        updateUiListener = builder.updateUiListener;
-        networkUiListener = builder.networkUiListener;
-        onDownloadListener = builder.onDownloadListener;
-        isDebug = BuildConfig.DEBUG;
-    }
-
     public void onDestroy() {
-        destroyOperate(installOperate);
-        destroyOperate(updateUiOperate);
-        destroyOperate(downloadOperate);
-        destroyOperate(networkUiOperate);
         data = null;
         apkFile = null;
         context = null;
         cacheDir = null;
-        downLoadResult = null;
+        destroyOperate(installOperate);
+        destroyOperate(updateUiOperate);
+        destroyOperate(downloadOperate);
+        destroyOperate(networkUiOperate);
         updateUiListener = null;
         networkUiListener = null;
-        onDownloadListener = null;
+        proxyDownLoadCallback = null;
+        downLoadResult = null;
+        installOperate = null;
+        updateUiOperate = null;
+        downloadOperate = null;
+        networkUiOperate = null;
+        resultListener = null;
+        proxyInstallCallback = null;
+    }
+
+    CheckUpdate(Builder builder) {
+        isForceUpdate = builder.isForceUpdate;
+        cacheDir = builder.parentDir == null ? context.getCacheDir().getAbsolutePath() : builder.parentDir.getAbsolutePath();
+        if (!TextUtils.isEmpty(builder.apkName)) {
+            apkFile = new File(cacheDir, builder.apkName);
+        }
+        updateUiListener = builder.updateUiListener;
+        networkUiListener = builder.networkUiListener;
+        proxyDownLoadCallback = builder.proxyDownLoadCallback;
+        proxyInstallCallback = builder.proxyInstallCallback;
+        authorities = String.format("%s.fileProvider", context.getPackageName());
     }
 
     private void destroyOperate(WaitOperate operate) {
@@ -125,14 +141,20 @@ public class CheckUpdate<T extends BaseVersionEntity> {
         }
     }
 
-    public <E extends BaseEntity<T>> ObservableTransformer<E, NoteEvent> checkUpdate(AppCompatActivity activity) {
-        return upstream -> upstream.compose(verifyNetVersion())
-                .compose(downloadApk())
-                .compose(installApk(activity));
+    @RequiresPermission(allOf = {ACCESS_WIFI_STATE, INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE})
+    public <E extends BaseEntity> ObservableTransformer<E, NoteEvent> checkUpdate(AppCompatActivity topActicity) {
+        return checkUpdate(topActicity, false);
     }
 
-    @SuppressWarnings("all")
-    public <E extends BaseEntity<T>> ObservableTransformer<E, NoteEvent> verifyNetVersion() {
+    @RequiresPermission(allOf = {ACCESS_WIFI_STATE, INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE})
+    public <E extends BaseEntity> ObservableTransformer<E, NoteEvent> checkUpdate(AppCompatActivity topActicity, boolean isIntelligentInstall) {
+        return upstream -> upstream.compose(verifyNetVersion())
+                .compose(downloadApk())
+                .compose(installApk(topActicity, isIntelligentInstall));
+    }
+
+    @RequiresPermission(allOf = {READ_EXTERNAL_STORAGE})
+    public <E extends BaseEntity> ObservableTransformer<E, NoteEvent> verifyNetVersion() {
         return upstream -> {
             Observable<NoteEvent> map = upstream
                     .map(e -> analyzeNetVersionResult(e, new NoteEvent()))
@@ -146,21 +168,23 @@ public class CheckUpdate<T extends BaseVersionEntity> {
             map = map.observeOn(AndroidSchedulers.mainThread())
                     .flatMap((Function<NoteEvent, ObservableSource<NoteEvent>>)
                             event -> {
-                                debugLog("showUpdateUi-1", Thread.currentThread().getName(), event);
+                                LogUtils.e("showUpdateUi-1", Thread.currentThread().getName(), event);
                                 if (event.isNeedUp()) {
                                     if (updateUiOperate == null) {
                                         updateUiOperate = new WaitOperate<>(event);
+                                    } else {
+                                        updateUiOperate.setLastNote(event);
                                     }
                                     try {
                                         updateUiListener.showUi(updateUiOperate, data);
                                     } catch (Exception e) {
                                         e.printStackTrace();
-                                        return Observable.error(e);
+                                        updateUiOperate.postError(e);
                                     }
-                                    debugLog("showUpdateUi-2", Thread.currentThread().getName(), event);
+                                    LogUtils.e("showUpdateUi-2", Thread.currentThread().getName(), event);
                                     return updateUiOperate.getNextNoteObservable();
                                 }
-                                debugLog("showUpdateUi-3", Thread.currentThread().getName(), event);
+                                LogUtils.e("showUpdateUi-3", Thread.currentThread().getName(), event);
                                 return Observable.just(event);
                             });
         }
@@ -170,14 +194,15 @@ public class CheckUpdate<T extends BaseVersionEntity> {
     /**
      * 权限请求之后调用
      */
-    public <E extends BaseEntity<T>> ObservableTransformer<Boolean, NoteEvent> verifyNetVersion(Observable<E> observable) {
+    @RequiresPermission(allOf = {READ_EXTERNAL_STORAGE})
+    public <E extends BaseEntity> ObservableTransformer<Boolean, NoteEvent> verifyNetVersion(Observable<E> observable) {
         return upstream -> {
             Observable<NoteEvent> map = upstream
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
                     .flatMap((Function<Boolean, ObservableSource<NoteEvent>>)
                             aBoolean -> {
-                                debugLog("verifyNetVersion-1", Thread.currentThread().getName(), aBoolean);
+                                LogUtils.e("verifyNetVersion-1", Thread.currentThread().getName(), aBoolean);
                                 NoteEvent result = new NoteEvent();
                                 if (!aBoolean) {
                                     result.setState(ResultState.RESULT_FAIL);
@@ -192,17 +217,17 @@ public class CheckUpdate<T extends BaseVersionEntity> {
     /**
      * 下载
      */
-    @SuppressWarnings("all")
+    @RequiresPermission(allOf = {ACCESS_WIFI_STATE, INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE})
     public ObservableTransformer<NoteEvent, NoteEvent> downloadApk() {
         return upstream -> {
             Observable<NetworkEvent> observeOn;
-            debugLog("downloadApk-1", Thread.currentThread().getName());
+            LogUtils.e("downloadApk-1", Thread.currentThread().getName());
             //网络校验
-            observeOn = upstream
+            return upstream
                     .observeOn(Schedulers.io())
                     .flatMap((Function<NoteEvent, ObservableSource<NetworkEvent>>)
                             noteEvent -> {
-                                debugLog("downloadApk-2", Thread.currentThread().getName(), noteEvent);
+                                LogUtils.e("downloadApk-2", Thread.currentThread().getName(), noteEvent);
                                 NetworkEvent networkEvent = new NetworkEvent(noteEvent);
                                 if (networkEvent.isNeedUp()) {
                                     boolean isCorrect = isCorrect();//验证本地安装文件
@@ -211,106 +236,136 @@ public class CheckUpdate<T extends BaseVersionEntity> {
                                         boolean isAvailable = Utils.isAvailable();
                                         networkEvent.setAvailable(isAvailable);
                                         if (isAvailable) {
-                                            networkEvent.setWifiAvailable(Utils.isWifiConnected(context) && Utils.isWifiAvailable(context));
-                                            return Observable.just(networkEvent);
+                                            boolean isWifiAvailable = Utils.isWifiConnected(context) && Utils.isWifiAvailable(context);
+                                            networkEvent.setWifiAvailable(isWifiAvailable);
+                                            networkEvent.setMsg("网络可用,准备下载");
+                                            LogUtils.e("downloadApk-3", Thread.currentThread().getName(), networkEvent);
+                                            return showNonWifiUi(isAvailable, isWifiAvailable, Observable.just(networkEvent));
                                         } else {
                                             setFail(networkEvent, "网络不可用");
                                         }
+                                    } else {
+                                        networkEvent.setMsg("本地APk验证成功,准备安装");
                                     }
                                 }
-                                debugLog("downloadApk-3", Thread.currentThread().getName(), networkEvent);
+                                LogUtils.e("downloadApk-5", Thread.currentThread().getName(), networkEvent);
                                 return Observable.just(networkEvent);
-                            });
-            if (networkUiListener != null) {
-                observeOn = observeOn
-                        .observeOn(AndroidSchedulers.mainThread())
-                        .flatMap((Function<NetworkEvent, ObservableSource<NetworkEvent>>) networkEvent -> {
-                            debugLog("downloadApk-4", Thread.currentThread().getName(), networkEvent);
-                            if (networkEvent.isNeedUp() && !networkEvent.isCorrect()) {
-                                if (networkEvent.isAvailable() && !networkEvent.isWifiAvailable()) {
-                                    if (networkUiOperate == null) {
-                                        networkUiOperate = new WaitOperate<>(networkEvent);
-                                    }
-                                    try {
-                                        networkUiListener.showUi(networkUiOperate, data);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                        return Observable.error(e);
-                                    }
-                                    debugLog("downloadApk-5", Thread.currentThread().getName(), networkEvent);
-                                    return networkUiOperate.getNextNoteObservable();
-                                }
-                            }
-                            debugLog("downloadApk-6", Thread.currentThread().getName(), networkEvent);
-                            return Observable.just(networkEvent);
-                        });
-            }
-            return observeOn
-                    .observeOn(AndroidSchedulers.mainThread())
+                            }).observeOn(AndroidSchedulers.mainThread())
                     .flatMap((Function<NetworkEvent, ObservableSource<NoteEvent>>)
                             event -> {
-                                debugLog("downloadApk-7", Thread.currentThread().getName(), event);
+                                LogUtils.e("downloadApk-6", Thread.currentThread().getName(), event);
                                 if (event.isNeedUp() && !event.isCorrect()) {
-                                    if (onDownloadListener != null) {
+                                    if (proxyDownLoadCallback != null) {
                                         if (downloadOperate == null) {
                                             downloadOperate = new WaitOperate<>(event);
+                                        } else {
+                                            downloadOperate.setLastNote(event);
                                         }
                                         try {
-                                            onDownloadListener.onDownload(apkFile, url, downLoadResult, data);
+                                            proxyDownLoadCallback.onDownload(apkFile, url, downLoadResult, data);
                                         } catch (Exception e) {
                                             e.printStackTrace();
-                                            return Observable.error(e);
+                                            downloadOperate.postError(e);
                                         }
-                                        debugLog("downloadApk-8", Thread.currentThread().getName(), event);
+                                        LogUtils.e("downloadApk-7", Thread.currentThread().getName(), event);
                                         return downloadOperate.getNextNoteObservable();
+                                    } else {
+                                        setFail(event, "下载代理不能为空");
                                     }
-                                    setFail(event, "下载监听不能为空");
                                 }
-                                debugLog("downloadApk-9", Thread.currentThread().getName(), event);
+                                LogUtils.e("downloadApk-8", Thread.currentThread().getName(), event);
                                 return Observable.just(event);
                             });
         };
     }
 
     /**
+     * 非WIFI环境提示UI处理
+     */
+    private Observable<NetworkEvent> showNonWifiUi(boolean isAvailable, boolean isWifiAvailable, Observable<NetworkEvent> just) {
+        if (networkUiListener != null && isAvailable && !isWifiAvailable) {
+            return just.observeOn(AndroidSchedulers.mainThread())
+                    .flatMap((Function<NetworkEvent, ObservableSource<NetworkEvent>>) event -> {
+                        LogUtils.e("downloadApk-4", Thread.currentThread().getName(), event);
+                        if (networkUiOperate == null) {
+                            networkUiOperate = new WaitOperate<>(event);
+                        } else {
+                            networkUiOperate.setLastNote(event);
+                        }
+                        try {
+                            networkUiListener.showUi(networkUiOperate, data);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            networkUiOperate.postError(e);
+                        }
+                        return networkUiOperate.getNextNoteObservable();
+                    });
+        } else {
+            return just;
+        }
+    }
+
+    /**
      * 安装
      */
-    @SuppressWarnings("all")
-    public ObservableTransformer<NoteEvent, NoteEvent> installApk(AppCompatActivity topActicity) {
+    @RequiresPermission(allOf = {READ_EXTERNAL_STORAGE})
+    public ObservableTransformer<NoteEvent, NoteEvent> installApk(AppCompatActivity topActicity, boolean isIntelligentInstall) {
         return upstream -> upstream
                 .observeOn(AndroidSchedulers.mainThread())
                 .flatMap((Function<NoteEvent, ObservableSource<NoteEvent>>)
                         event -> {
-                            debugLog("installApk-1", Thread.currentThread().getName(), event);
+                            LogUtils.e("installApk-1", Thread.currentThread().getName(), event);
                             if (event.isNeedUp()) {
                                 if (isCorrect()) {//验证本地安装文件
                                     if (installOperate == null) {
                                         installOperate = new WaitOperate<>(event);
+                                    } else {
+                                        installOperate.setLastNote(event);
                                     }
                                     try {
-                                        Utils.installAutoForResult(topActicity, apkFile, resultListener);
+                                        if (proxyInstallCallback == null) {
+                                            Utils.installAutoForResult(topActicity, apkFile, resultListener);
+                                        } else {
+                                            proxyInstallCallback.install(apkFile, authorities, isIntelligentInstall, resultListener, data);
+                                        }
                                     } catch (Exception e) {
                                         e.printStackTrace();
-                                        return Observable.error(e);
+                                        installOperate.postError(e);
                                     }
-                                    debugLog("installApk-2", Thread.currentThread().getName(), event);
+                                    LogUtils.e("installApk-2", Thread.currentThread().getName(), event);
                                     return installOperate.getNextNoteObservable();
                                 } else {
-                                    setFail(event, "下载文件校验失败");
+                                    setFail(event, "安装文件校验失败");
                                 }
                             }
-                            debugLog("installApk-3", Thread.currentThread().getName(), event);
+                            LogUtils.e("installApk-3", Thread.currentThread().getName(), event);
                             return Observable.just(event);
                         });
     }
 
-    private <E extends BaseEntity<T>> NoteEvent analyzeNetVersionResult(E e, NoteEvent result) {
-        debugLog("analyzeNetVersionResult-1", Thread.currentThread().getName(), result);
+    @RequiresPermission(allOf = {READ_EXTERNAL_STORAGE})
+    private <E extends BaseEntity<BaseVersionEntity>> NoteEvent analyzeNetVersionResult(E e, NoteEvent result) {
+        LogUtils.e("analyzeNetVersionResult-1", Thread.currentThread().getName(), result);
         if (e != null && e.isSuccess()) {
-            if ((data = e.getData()) != null
+            data = e.getData();
+            if (data != null) {
+                LogUtils.e(AppUtils.getVersionCode(context),
+                        data.valueOfVersionName(data.getVersionName()),
+                        data.valueOfVersionName(AppUtils.getVersionName(context)),
+                        compareVersionName(data.getVersionName())
+                );
+            }
+            if (data != null
                     && (AppUtils.getVersionCode(context) < data.getVersionCode()
                     || compareVersionName(data.getVersionName()))) {
                 try {
+                    LogUtils.e(
+                            data.getVersionCode(),
+                            data.getVersionName(),
+                            data.valueOfVersionName(AppUtils.getVersionName(context)),
+                            data.valueOfVersionName(data.getVersionName()),
+                            AppUtils.getVersionCode(context) < data.getVersionCode(),
+                            compareVersionName(data.getVersionName()));
                     url = Utils.checkUrl(data.getAppUrl()).toString();
                     result.setState(ResultState.RESULT_NEED_UPDATE);
                     result.setMsg("准备更新");
@@ -334,7 +389,7 @@ public class CheckUpdate<T extends BaseVersionEntity> {
             result.setState(ResultState.RESULT_FAIL);
             result.setMsg("获取网络版本信息失败");
         }
-        debugLog("analyzeNetVersionResult-2", Thread.currentThread().getName(), result);
+        LogUtils.e("analyzeNetVersionResult-2", Thread.currentThread().getName(), result);
         return result;
     }
 
@@ -357,15 +412,19 @@ public class CheckUpdate<T extends BaseVersionEntity> {
     /**
      * 验证本地安装文件是否正确
      */
+    @RequiresPermission(allOf = {READ_EXTERNAL_STORAGE})
     private boolean isCorrect() {
         String md5;
-        debugLog("isCorrect-1", FileUtils.isFileExists(apkFile), data != null ? (TextUtils.isEmpty((md5 = data.md5())) || Utils.verifyMD5(apkFile, md5)) : "null");
+        LogUtils.e("isCorrect-1", FileUtils.isFileExists(apkFile), apkFile);
+        if (data != null) {
+            LogUtils.e(data.md5(), (TextUtils.isEmpty((md5 = data.md5())) || Utils.verifyMD5(apkFile, md5)), Utils.verifyMD5(apkFile, data.md5()));
+        }
         if (FileUtils.isFileExists(apkFile) && data != null && (TextUtils.isEmpty((md5 = data.md5())) || Utils.verifyMD5(apkFile, md5))) {
             try {
                 AppUtils.AppInfo apkInfo = AppUtils.getApkInfo(context, apkFile);
                 long versionCode = AppUtils.getVersionCode(context);
                 if (apkInfo != null) {
-                    debugLog("isCorrect-2", context.getPackageName().equals(apkInfo.getPackageName()),
+                    LogUtils.e("isCorrect-2", context.getPackageName().equals(apkInfo.getPackageName()),
                             versionCode < apkInfo.getVersionCode(),
                             compareVersionName(apkInfo.getVersionName()));
                 }
@@ -374,62 +433,22 @@ public class CheckUpdate<T extends BaseVersionEntity> {
                         && (versionCode < apkInfo.getVersionCode() || compareVersionName(apkInfo.getVersionName()));
             } catch (Exception e) {
                 e.printStackTrace();
+                LogUtils.e(e);
                 return false;
             }
         }
         return false;
     }
 
-    private void debugLog(Object... msg) {
-        if (isDebug) {
-            LogUtils.e(msg);
-        }
+    public static BaseBuilder builder() {
+        return new Builder();
     }
 
     public interface OperateListener {
+        void postNext(boolean isNext, String msg);
+
         void postNext(boolean isNext);
 
         void postError(Throwable e);
     }
-
-    public static class Builder<T extends BaseVersionEntity> {
-        private OnShowUiListener<T> updateUiListener = null;
-        private OnShowUiListener<T> networkUiListener = null;
-        private OnDownloadListener<T> onDownloadListener = null;
-        private boolean isForceUpdate = false;
-        private File parentDir = null;
-
-        public Builder<T> setUpdateUiListener(OnShowUiListener<T> updateUiListener) {
-            this.updateUiListener = updateUiListener;
-            return this;
-        }
-
-        public Builder<T> setNetworkUiListener(OnShowUiListener<T> networkUiListener) {
-            this.networkUiListener = networkUiListener;
-            return this;
-        }
-
-        public Builder<T> setOnDownloadListener(OnDownloadListener<T> onDownloadListener) {
-            this.onDownloadListener = onDownloadListener;
-            return this;
-        }
-
-        /**
-         * @param isForceUpdate 如果设为true  将禁用更新提示UI用户"否"选项
-         */
-        public Builder<T> setForceUpdate(boolean isForceUpdate) {
-            this.isForceUpdate = isForceUpdate;
-            return this;
-        }
-
-        public Builder<T> setCacheDir(File parentDir) {
-            this.parentDir = parentDir;
-            return this;
-        }
-
-        public CheckUpdate<T> build() {
-            return new CheckUpdate<T>(this);
-        }
-    }
 }
-

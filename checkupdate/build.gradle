@@ -3,7 +3,7 @@ apply plugin: 'com.github.dcendents.android-maven'
 apply plugin: 'com.novoda.bintray-release'
 
 group rootProject.GROUP_ID
-version "1.0.1-bate"
+version "1.0.2-bate"
 
 android {
     compileSdkVersion 30

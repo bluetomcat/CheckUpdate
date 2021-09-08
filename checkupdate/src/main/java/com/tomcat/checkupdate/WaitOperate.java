@@ -17,85 +17,92 @@ import io.reactivex.subjects.PublishSubject;
 public class WaitOperate<N extends NoteEvent> implements CheckUpdate.OperateListener {
 
     private N lastNote;
-    private boolean isDebug;
-    private PublishSubject<N> subjects;
+    private Observable<N> subjects;
 
     WaitOperate(N note) {
         lastNote = note;
-        subjects = PublishSubject.create();
-        isDebug = BuildConfig.DEBUG;
+    }
+
+    void setLastNote(N note) {
+        onDestroy();
+        lastNote = note;
     }
 
     Observable<N> getNextNoteObservable() {
-        return Observable.concat(Observable.just(subjects));
+        if (subjects == null) {
+            subjects = PublishSubject.create();
+            return Observable.concat(Observable.just(subjects));
+        }
+        return subjects;
     }
 
-    public void onDestroy() {
-        if (subjects != null && !subjects.hasComplete()) {
-            if (lastNote == null){
-                lastNote = (N) new NoteEvent();
-            }
-            lastNote.setNeedUp(false);
-            lastNote.setMsg("取消检查更新");
-            lastNote.setState(ResultState.RESULT_CANCEL);
-            subjects.onNext(lastNote);
-            subjects.onComplete();
-        }
+    void onDestroy() {
+        onComplete(getPublishSubject());
         subjects = null;
         lastNote = null;
     }
 
+    private void onComplete(PublishSubject<N> publishSubject) {
+        if (!(publishSubject == null || publishSubject.hasComplete())) {
+            publishSubject.onComplete();
+        }
+    }
+
     @Override
     public void postNext(boolean isNext) {
-        next(isNext);
+        next(isNext, lastNote == null ? null : lastNote.getMsg());
+    }
+
+    @Override
+    public void postNext(boolean isNext, String msg) {
+        next(isNext, msg);
     }
 
     @Override
     public void postError(Throwable e) {
-        checkNotNull();
-        subjects.onError(e);
+        onError(e);
     }
 
-    private void next(boolean isNext) {
-        checkNotNull();
+    private void next(boolean isNext, String msg) {
+        checkNoteNull();
         try {
-            debugLog(isNext, lastNote);
+            LogUtils.e(isNext, lastNote);
             if (!isNext) {
                 lastNote.setState(ResultState.RESULT_CANCEL);
                 lastNote.setMsg("用户取消更新");
             }
-            goNext(isNext);
+            goNext(isNext, msg);
         } catch (Exception e) {
             e.printStackTrace();
-            subjects.onError(e);
-        }
-    }
-
-    private void goNext(boolean isNeedUp) {
-        checkNotNull();
-        try {
-            debugLog(isNeedUp, lastNote);
-            goNext(isNeedUp, lastNote.getMsg(), lastNote.getState());
-        } catch (Exception e) {
-            e.printStackTrace();
-            subjects.onError(e);
+            onError(e);
         }
     }
 
     void goNext(boolean isNeedUp, String msg) {
-        checkNotNull();
+        checkNoteNull();
         try {
+            LogUtils.e(isNeedUp, lastNote);
             goNext(isNeedUp, msg, lastNote.getState());
         } catch (Exception e) {
             e.printStackTrace();
-            subjects.onError(e);
+            onError(e);
+        }
+    }
+
+    private void onError(Throwable e) {
+        PublishSubject<N> publishSubject = getPublishSubject();
+        if (publishSubject != null) {
+            publishSubject.onError(e);
+            onComplete(publishSubject);
+        } else {
+            subjects = Observable.error(e);
         }
     }
 
     void goNext(boolean isNeedUp, String msg, int state) {
-        checkNotNull();
+        checkNoteNull();
         try {
-            debugLog(isNeedUp, msg, state, lastNote);
+            LogUtils.e(isNeedUp, msg, state, lastNote);
             if (lastNote.isForceUpdate() && !(lastNote instanceof NetworkEvent)) {
                 lastNote.setNeedUp(true);
             } else {
@@ -103,23 +110,29 @@ public class WaitOperate<N extends NoteEvent> implements CheckUpdate.OperateList
             }
             lastNote.setMsg(msg);
             lastNote.setState(state);
-            subjects.onNext(lastNote);
-            subjects.onComplete();
+            PublishSubject<N> publishSubject = getPublishSubject();
+            if (publishSubject != null) {
+                publishSubject.onNext(lastNote);
+                onComplete(publishSubject);
+            } else {
+                subjects = Observable.just(lastNote);
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            subjects.onError(e);
+            onError(e);
         }
     }
 
-    private void checkNotNull() {
-        if (subjects == null) {
-            throw new NullPointerException("PublishSubject  is Not Null");
+    private PublishSubject<N> getPublishSubject() {
+        if (subjects instanceof PublishSubject) {
+            return (PublishSubject<N>) this.subjects;
         }
+        return null;
     }
 
-    private void debugLog(Object... msg) {
-        if (isDebug) {
-            LogUtils.e(msg);
+    private void checkNoteNull() {
+        if (lastNote == null) {
+            throw new NullPointerException("lastNote  is Not Null");
         }
     }
 }
